@@ -16,6 +16,7 @@ services:
       MORNING_WINDOW: ${MORNING_WINDOW:-8-10}
       EVENING_WINDOW: ${EVENING_WINDOW:-17-20}
       RIDE_SPEED_KMH: ${RIDE_SPEED_KMH:-60}
+      ENABLE_COMMANDS: ${ENABLE_COMMANDS:-true}
     logging:
       driver: json-file
       options: { max-size: "2m", max-file: "2" }
