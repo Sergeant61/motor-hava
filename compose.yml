@@ -1,0 +1,21 @@
+# Hem Coolify hem düz `docker compose` ile çalışır.
+# Coolify ${...} değişkenlerini algılayıp "Environment Variables" sekmesinde gösterir;
+# lokalde aynı değerler .env dosyasından okunur.
+services:
+  motor-hava:
+    build: .
+    restart: unless-stopped
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:?}
+      LOCATION_NAME: ${LOCATION_NAME:-Gebze}
+      LAT: ${LAT:-40.8028}
+      LON: ${LON:-29.4307}
+      SEND_TIME: ${SEND_TIME:-08:30}
+      TZ: ${TZ:-Europe/Istanbul}
+      MORNING_WINDOW: ${MORNING_WINDOW:-8-10}
+      EVENING_WINDOW: ${EVENING_WINDOW:-17-20}
+      RIDE_SPEED_KMH: ${RIDE_SPEED_KMH:-60}
+    logging:
+      driver: json-file
+      options: { max-size: "2m", max-file: "2" }
