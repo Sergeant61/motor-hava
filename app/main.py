@@ -5,7 +5,7 @@ Kullanım:
   python main.py --now           # hemen bir kez gönder ve çık
   python main.py --now --dry-run # göndermeden /out/rapor.png üret
   python main.py --now --dry-run --sample veri.json   # API yerine dosyadan
-  python main.py --radar [--dry-run]                   # son 2 saatin radar GIF'i
+  python main.py --radar [--dry-run]                   # önümüzdeki 12 saatin yağış haritası
 """
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from zoneinfo import ZoneInfo
 import requests
 
 from analysis import Config, analyze, caption, fetch
-from radar import render_radar
+from radar import H as RADAR_H, W as RADAR_W, render_radar
 from render import render
 
 log = logging.getLogger("motor-hava")
@@ -71,11 +71,12 @@ def send(png: str, text: str) -> None:
         tg("sendMessage", data={"chat_id": chat, "text": text, "parse_mode": "HTML"})
 
 
-def send_animation(gif: str, text: str) -> None:
-    with open(gif, "rb") as f:
-        tg("sendAnimation", data={"chat_id": os.environ["TELEGRAM_CHAT_ID"], "caption": text,
-                                  "parse_mode": "HTML"},
-           files={"animation": ("radar.gif", f, "image/gif")})
+def send_video(mp4: str, text: str, width: int, height: int) -> None:
+    with open(mp4, "rb") as f:
+        tg("sendVideo", data={"chat_id": os.environ["TELEGRAM_CHAT_ID"], "caption": text,
+                              "parse_mode": "HTML", "width": width, "height": height,
+                              "supports_streaming": True},
+           files={"video": ("radar.mp4", f, "video/mp4")})
 
 
 # ---------------------------------------------------------------- job
@@ -114,13 +115,13 @@ def _job(dry: bool, sample: str | None) -> str:
 def radar_job(dry: bool = False) -> str:
     cfg = Config()
     os.makedirs(OUT, exist_ok=True)
-    gif, text = render_radar(cfg.lat, cfg.lon, cfg.location, TZ, os.path.join(OUT, "radar.gif"))
+    mp4, text = render_radar(cfg.lat, cfg.lon, cfg.location, TZ, os.path.join(OUT, "radar.mp4"))
     if dry:
         print(text)
     else:
-        send_animation(gif, text)
+        send_video(mp4, text, RADAR_W, RADAR_H)
         log.info("Radar Telegram'a gönderildi")
-    return gif
+    return mp4
 
 
 def job_with_retry(**kw) -> None:
@@ -142,7 +143,7 @@ def job_with_retry(**kw) -> None:
 # ---------------------------------------------------------------- bot komutları
 HELP = ("<b>Komutlar</b>\n"
         "/now – raporu şimdi gönder (20:00 sonrası yarının raporu)\n"
-        "/radar – son 2 saatin yağış radarı (animasyon)\n"
+        "/radar – önümüzdeki 12 saatin yağış haritası (video)\n"
         "/help – bu mesaj")
 
 
@@ -177,7 +178,7 @@ def poll_commands() -> None:
         tg("deleteWebhook")
         tg("setMyCommands", json={"commands": [
             {"command": "now", "description": "Raporu şimdi gönder"},
-            {"command": "radar", "description": "Son 2 saatin yağış radarı"},
+            {"command": "radar", "description": "Önümüzdeki 12 saatin yağış haritası"},
             {"command": "help", "description": "Yardım"}]})
     except Exception:
         log.exception("Bot komut kurulumu başarısız")
