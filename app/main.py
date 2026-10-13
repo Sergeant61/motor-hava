@@ -162,6 +162,7 @@ def handle(text: str) -> None:
             log.exception("/now başarısız")
             reply(f"⚠️ Rapor üretilemedi: {e}"[:400])
     elif cmd == "/radar":
+        reply("⏳ Yağış haritası hazırlanıyor…")
         try:
             radar_job()
         except Exception as e:
