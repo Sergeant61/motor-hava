@@ -5,6 +5,7 @@ Kullanım:
   python main.py --now           # hemen bir kez gönder ve çık
   python main.py --now --dry-run # göndermeden /out/rapor.png üret
   python main.py --now --dry-run --sample veri.json   # API yerine dosyadan
+  python main.py --radar [--dry-run]                   # son 2 saatin radar GIF'i
 """
 from __future__ import annotations
 
@@ -22,6 +23,7 @@ from zoneinfo import ZoneInfo
 import requests
 
 from analysis import Config, analyze, caption, fetch
+from radar import render_radar
 from render import render
 
 log = logging.getLogger("motor-hava")
@@ -69,6 +71,13 @@ def send(png: str, text: str) -> None:
         tg("sendMessage", data={"chat_id": chat, "text": text, "parse_mode": "HTML"})
 
 
+def send_animation(gif: str, text: str) -> None:
+    with open(gif, "rb") as f:
+        tg("sendAnimation", data={"chat_id": os.environ["TELEGRAM_CHAT_ID"], "caption": text,
+                                  "parse_mode": "HTML"},
+           files={"animation": ("radar.gif", f, "image/gif")})
+
+
 # ---------------------------------------------------------------- job
 _lock = threading.Lock()  # zamanlanmış gönderim ile /now aynı anda çalışmasın
 
@@ -102,6 +111,18 @@ def _job(dry: bool, sample: str | None) -> str:
     return png
 
 
+def radar_job(dry: bool = False) -> str:
+    cfg = Config()
+    os.makedirs(OUT, exist_ok=True)
+    gif, text = render_radar(cfg.lat, cfg.lon, cfg.location, TZ, os.path.join(OUT, "radar.gif"))
+    if dry:
+        print(text)
+    else:
+        send_animation(gif, text)
+        log.info("Radar Telegram'a gönderildi")
+    return gif
+
+
 def job_with_retry(**kw) -> None:
     delays = [0, 60, 180, 600]
     for i, d in enumerate(delays):
@@ -121,6 +142,7 @@ def job_with_retry(**kw) -> None:
 # ---------------------------------------------------------------- bot komutları
 HELP = ("<b>Komutlar</b>\n"
         "/now – raporu şimdi gönder (20:00 sonrası yarının raporu)\n"
+        "/radar – son 2 saatin yağış radarı (animasyon)\n"
         "/help – bu mesaj")
 
 
@@ -138,6 +160,12 @@ def handle(text: str) -> None:
         except Exception as e:
             log.exception("/now başarısız")
             reply(f"⚠️ Rapor üretilemedi: {e}"[:400])
+    elif cmd == "/radar":
+        try:
+            radar_job()
+        except Exception as e:
+            log.exception("/radar başarısız")
+            reply(f"⚠️ Radar alınamadı: {e}"[:400])
     elif cmd in ("/start", "/help"):
         reply(HELP)
 
@@ -149,11 +177,12 @@ def poll_commands() -> None:
         tg("deleteWebhook")
         tg("setMyCommands", json={"commands": [
             {"command": "now", "description": "Raporu şimdi gönder"},
+            {"command": "radar", "description": "Son 2 saatin yağış radarı"},
             {"command": "help", "description": "Yardım"}]})
     except Exception:
         log.exception("Bot komut kurulumu başarısız")
     offset = None
-    log.info("Bot komutları dinleniyor (/now, /help)")
+    log.info("Bot komutları dinleniyor (/now, /radar, /help)")
     while True:
         try:
             params = {"timeout": 50, "allowed_updates": ["message"]}
@@ -191,8 +220,12 @@ def main() -> None:
     p.add_argument("--now", action="store_true")
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--sample")
+    p.add_argument("--radar", action="store_true")
     a = p.parse_args()
 
+    if a.radar:
+        radar_job(dry=a.dry_run)
+        return
     if a.now:
         if a.dry_run:
             job(dry=True, sample=a.sample)
